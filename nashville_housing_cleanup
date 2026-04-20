@@ -1,0 +1,130 @@
+SELECT *
+FROM [Portfolio Projects]..nashville_housing;
+
+-- Standardize Sale Date format
+Select SaleDate, CONVERT(date, SaleDate)
+FROM [Portfolio Projects]..nashville_housing
+
+ALTER TABLE nashville_housing
+ADD SaleDateConverted DATE;
+
+UPDATE nashville_housing
+SET SaleDateConverted = CONVERT(date, SaleDate);
+
+-- Populate missing Property Address data
+
+SELECT *
+FROM [Portfolio Projects]..nashville_housing
+WHERE PropertyAddress IS NULL
+
+
+SELECT [UniqueID ], ParcelID, PropertyAddress
+FROM [Portfolio Projects]..nashville_housing
+ORDER BY ParcelID
+
+SELECT a.ParcelID, b.ParcelID, a.PropertyAddress, b.PropertyAddress, ISNULL(a.PropertyAddress, b.PropertyAddress)
+FROM [Portfolio Projects]..nashville_housing a
+JOIN [Portfolio Projects]..nashville_housing b
+    ON a.ParcelID = b.ParcelID
+    AND a.[UniqueID ]<>b.[UniqueID ]
+WHERE a.PropertyAddress IS NULL;
+
+UPDATE a
+SET PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+FROM [Portfolio Projects]..nashville_housing a
+JOIN [Portfolio Projects]..nashville_housing b
+    ON a.ParcelID = b.ParcelID
+    AND a.[UniqueID ]<>b.[UniqueID ]
+WHERE a.PropertyAddress IS NULL;
+
+-- Break out addresses to invdividual columns (Address, City, State)
+
+SELECT PropertyAddress, OwnerAddress
+FROM [Portfolio Projects]..nashville_housing
+
+SELECT SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1) as Address,
+SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, LEN(PropertyAddress)) as "City"
+FROM [Portfolio Projects]..nashville_housing;
+
+ALTER TABLE [Portfolio Projects]..nashville_housing
+ADD PropertyStreetAddress NVARCHAR(255);
+
+UPDATE [Portfolio Projects]..nashville_housing
+SET PropertyStreetAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1);
+
+ALTER TABLE [Portfolio Projects]..nashville_housing
+ADD PropertyCity NVARCHAR(255);
+
+UPDATE [Portfolio Projects]..nashville_housing
+SET PropertyCity = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, LEN(PropertyAddress))
+
+SELECT OwnerAddress
+FROM [Portfolio Projects]..nashville_housing;
+-- Based on dataset notes, null values okay here
+
+SELECT 
+PARSENAME(REPLACE(OwnerAddress, ',', '.'), 3) as Street,
+PARSENAME(REPLACE(OwnerAddress, ',', '.'), 2) as City,
+PARSENAME(REPLACE(OwnerAddress, ',', '.'), 1) as "State"
+FROM [Portfolio Projects]..nashville_housing
+
+ALTER TABLE [Portfolio Projects]..nashville_housing
+ADD OwnerStreetAddress NVARCHAR(255),  
+    OwnerCity NVARCHAR(255), 
+    OwnerState NVARCHAR(255);
+
+UPDATE [Portfolio Projects]..nashville_housing
+SET OwnerStreetAddress = PARSENAME(REPLACE(OwnerAddress, ',', '.'), 3),
+    OwnerCity = PARSENAME(REPLACE(OwnerAddress, ',', '.'), 2),
+    OwnerState = PARSENAME(REPLACE(OwnerAddress, ',', '.'), 1);
+
+SELECT OwnerStreetAddress, OwnerCity, OwnerState
+FROM [Portfolio Projects]..nashville_housing;
+
+-- Change Y and N to Yes and No
+SELECT DISTINCT(SoldAsVacant), COUNT(SoldAsVacant)
+FROM [Portfolio Projects]..nashville_housing
+GROUP BY SoldAsVacant
+ORDER BY 2;
+
+SELECT SoldAsVacant,
+CASE when SoldAsVacant = 'Y' Then 'Yes'
+    When SoldAsVacant = 'N' Then 'No'
+    Else SoldAsVacant
+    END
+FROM [Portfolio Projects]..nashville_housing;
+
+UPDATE [Portfolio Projects]..nashville_housing
+SET SoldAsVacant = CASE when SoldAsVacant = 'Y' Then 'Yes'
+    When SoldAsVacant = 'N' Then 'No'
+    Else SoldAsVacant
+    END;
+
+-- Remove Duplicates
+WITH RowNumCTE AS (
+Select *,
+	ROW_NUMBER() OVER (
+	PARTITION BY ParcelID,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 ORDER BY
+					UniqueID
+					) row_num
+From [Portfolio Projects]..nashville_housing
+)
+SELECT *
+FROM RowNumCTE
+WHERE row_num = 1
+ORDER BY ParcelID;
+
+
+
+-- Delete Unused Columns
+
+ALTER TABLE [Portfolio Projects]..nashville_housing
+DROP COLUMN OwnerAddress, SaleDate, TaxDistrict, PropertyAddress;
+
+SELECT *
+FROM [Portfolio Projects]..nashville_housing;
